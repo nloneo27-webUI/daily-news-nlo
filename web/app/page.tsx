@@ -10,177 +10,193 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const CATEGORIES = ["政治", "经济", "科技", "AI", "段子"];
+const MENU_ITEMS = ["首页", "政治", "经济", "科技", "AI", "段子"];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("科技");
+  const [activeTab, setActiveTab] = useState("首页");
   const [quote, setQuote] = useState<any>(null);
-  const [news, setNews] = useState<any>(null);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // 1. 获取顶部的哲理/历史
+  // 1. 获取哲理
   useEffect(() => {
     async function fetchQuote() {
-      const { data } = await supabase
-        .from('daily_quotes')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const { data } = await supabase.from('daily_quotes').select('*').order('created_at', { ascending: false }).limit(1).single();
       if (data) setQuote(data);
     }
     fetchQuote();
   }, []);
 
-  // 2. 获取底部的新闻
+  // 2. 获取数据
   useEffect(() => {
-    async function fetchNews() {
+    async function fetchData() {
       setLoading(true);
-      const { data } = await supabase
-        .from('daily_briefs')
-        .select('*')
-        .eq('sub_menu', activeTab)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      if (data && data.length > 0) setNews(data[0]);
-      else setNews(null);
+      const { data } = await supabase.from('daily_briefs').select('*').eq('category', activeTab).order('created_at', { ascending: false }).limit(1);
+      if (data && data.length > 0) setData(data[0]);
+      else setData(null);
       setLoading(false);
     }
-    fetchNews();
+    fetchData();
   }, [activeTab]);
 
   const today = new Date();
 
   return (
-    // 全局背景：高级渐变色 (莫兰迪色系：极淡紫 -> 极淡蓝)
-    <div className="min-h-screen bg-gradient-to-br from-[#fdfbfb] via-[#ebedee] to-[#f3e7e9] font-sans text-slate-800 pb-10">
+    // 背景色：暖调的米白色 (Paper Color)
+    <div className="min-h-screen bg-[#F2F0E9] text-[#1A1A1A] font-sans selection:bg-[#FF4D00] selection:text-white overflow-hidden relative">
       
-      <div className="max-w-md mx-auto min-h-screen bg-white/40 backdrop-blur-xl shadow-2xl overflow-hidden flex flex-col relative">
+      {/* --- 全局噪点层 --- */}
+      <div className="bg-noise"></div>
+
+      {/* --- 背景流体装饰 --- */}
+      <div className="fixed top-[-20%] right-[-10%] w-[600px] h-[600px] bg-gradient-to-br from-[#FF4D00] to-[#FFD700] rounded-full blur-[120px] opacity-20 mix-blend-multiply animate-float -z-10"></div>
+      <div className="fixed bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-gradient-to-tr from-[#2E5CFF] to-[#00FFFF] rounded-full blur-[100px] opacity-20 mix-blend-multiply -z-10"></div>
+
+      <div className="flex flex-col md:flex-row h-screen relative z-10">
         
-        {/* === Part 1: 顶部哲理区 === */}
-        <header className="pt-12 pb-8 px-6 text-center relative z-10">
-          {/* 日期装饰 */}
-          <div className="inline-block mb-4 px-3 py-1 rounded-full border border-slate-300/50 bg-white/50 text-xs font-mono text-slate-500 shadow-sm">
-            {format(today, 'yyyy年MM月dd日 · EEEE', { locale: zhCN })}
+        {/* === 左侧导航 === */}
+        <aside className="w-full md:w-24 md:h-screen flex-shrink-0 bg-[#1A1A1A] text-[#F2F0E9] flex md:flex-col justify-between items-center py-4 md:py-8 px-4 border-r border-black">
+          {/* Logo */}
+          <div className="font-serif font-black text-xl md:text-3xl tracking-tighter md:writing-vertical-lr rotate-180 md:rotate-0">
+            GLOBAL DAILY
           </div>
 
-          {/* 标题 */}
-          <h1 className="text-xl font-serif font-bold text-slate-800 tracking-widest mb-6">
-            见过什么道理<br/>便住此山
-          </h1>
+          {/* 菜单 */}
+          <nav className="flex md:flex-col gap-6 md:gap-8 overflow-x-auto md:overflow-visible no-scrollbar">
+            {MENU_ITEMS.map((item) => (
+              <button
+                key={item}
+                onClick={() => setActiveTab(item)}
+                className={`text-xs md:text-sm font-bold uppercase tracking-widest transition-all duration-300 relative group
+                  ${activeTab === item ? 'text-[#FF4D00]' : 'text-gray-500 hover:text-white'}
+                `}
+              >
+                <span className="md:writing-vertical-lr md:rotate-180">{item}</span>
+                {activeTab === item && (
+                  <span className="absolute -bottom-2 md:bottom-auto md:-right-3 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 w-1 h-1 bg-[#FF4D00] rounded-full"></span>
+                )}
+              </button>
+            ))}
+          </nav>
 
-          {/* 哲理卡片 */}
-          <div className="bg-white/60 p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 backdrop-blur-sm">
-            {quote ? (
-              <>
-                <p className="text-sm md:text-base leading-relaxed text-slate-700 font-light mb-4">
-                  “{quote.content}”
-                </p>
-                <div className="text-right text-xs text-slate-400 font-bold uppercase tracking-widest">
-                  — {quote.author}
-                </div>
-              </>
+          <div className="hidden md:block text-[10px] font-mono opacity-50 rotate-180 writing-vertical-lr">
+            {format(today, 'yyyy.MM.dd')}
+          </div>
+        </aside>
+
+        {/* === 右侧主内容区 === */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-12 lg:p-20 scroll-smooth">
+          <div className="max-w-4xl mx-auto">
+            
+            {/* 顶部手机日期 */}
+            <div className="md:hidden flex justify-between items-center mb-8 border-b border-black/10 pb-4">
+              <span className="font-mono text-xs">{format(today, 'yyyy.MM.dd')}</span>
+              <span className="font-serif italic font-bold text-[#FF4D00]">{activeTab}</span>
+            </div>
+
+            {loading ? (
+              <div className="h-[60vh] flex flex-col items-center justify-center">
+                <div className="text-6xl md:text-8xl font-black animate-pulse opacity-10">LOADING</div>
+              </div>
             ) : (
-              <div className="h-20 flex items-center justify-center text-slate-400 text-xs animate-pulse">
-                正在寻找今日灵感...
+              <div className="space-y-16 animate-fade-in-up">
+                
+                {/* --- 场景 A: 首页 --- */}
+                {activeTab === "首页" && (
+                  <>
+                    {/* 0. 全站 Slogan (这里加回来了！) */}
+                    <header className="border-b-4 border-black pb-8 mb-12">
+                      <h1 className="text-4xl md:text-6xl font-serif font-black text-[#1A1A1A] leading-[1.1]">
+                        见过什么道理<br/>
+                        <span className="text-[#FF4D00]">便住此山</span>
+                      </h1>
+                      <div className="flex items-center gap-4 mt-4">
+                        <div className="h-px bg-black w-12"></div>
+                        <p className="font-mono text-sm opacity-60 tracking-widest uppercase">
+                          Seen some truth, then live in this mountain.
+                        </p>
+                      </div>
+                    </header>
+
+                    {/* 1. 每日随机哲理 (Hero Section) */}
+                    <section className="relative mb-20 pl-8 md:pl-16 border-l-2 border-dashed border-gray-300">
+                      <span className="absolute top-0 left-[-1rem] md:left-[-1.5rem] text-4xl bg-[#F2F0E9] text-gray-400">“</span>
+                      {quote ? (
+                        <div>
+                          <p className="text-2xl md:text-3xl lg:text-4xl font-serif font-bold leading-tight text-[#1A1A1A] mb-6">
+                            {quote.content}
+                          </p>
+                          <p className="font-mono text-sm font-bold uppercase tracking-widest text-[#FF4D00]">
+                            — {quote.author}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-2xl font-serif opacity-50">Waiting for daily wisdom...</p>
+                      )}
+                    </section>
+
+                    {/* 2. 今日全站导读 */}
+                    {data?.summary && (
+                      <section className="bg-[#1A1A1A] text-[#F2F0E9] p-8 md:p-10 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF4D00] blur-[80px] opacity-20 group-hover:opacity-40 transition-opacity"></div>
+                        
+                        <div className="relative z-10">
+                          <h3 className="font-mono text-xs font-bold uppercase text-[#FF4D00] mb-4 flex items-center gap-2">
+                            <span className="w-2 h-2 bg-[#FF4D00] rounded-full animate-pulse"></span>
+                            AI SUMMARY
+                          </h3>
+                          <div className="text-lg md:text-xl font-sans leading-relaxed text-justify opacity-90">
+                            {data.summary}
+                          </div>
+                        </div>
+                      </section>
+                    )}
+                  </>
+                )}
+
+                {/* --- 场景 B: 分类页 --- */}
+                {activeTab !== "首页" && (
+                  <div>
+                    {/* 分类标题 */}
+                    <header className="mb-12 flex items-end gap-4 border-b-4 border-black pb-4">
+                      <h1 className="text-6xl md:text-8xl font-serif font-black text-[#1A1A1A]">{activeTab}</h1>
+                      <span className="font-mono text-sm mb-2 opacity-60">/ NEWS FEED</span>
+                    </header>
+
+                    {/* 新闻列表 */}
+                    <div className="flex flex-col gap-8">
+                      {data?.cards?.map((card: any, idx: number) => (
+                        <article key={idx} className="group relative bg-white border-2 border-black p-6 md:p-8 hover:translate-x-2 hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_#1A1A1A] transition-all duration-300">
+                          <div className="absolute top-0 right-0 bg-black text-white font-mono text-xs px-3 py-1">
+                            {String(idx + 1).padStart(2, '0')}
+                          </div>
+                          <h3 className="text-xl md:text-2xl font-bold mb-4 group-hover:text-[#FF4D00] transition-colors leading-snug">
+                            {card.title}
+                          </h3>
+                          <p className="text-base md:text-lg text-gray-600 leading-relaxed font-light mb-6 text-justify">
+                            {card.content}
+                          </p>
+                          {card.url && (
+                            <div className="flex justify-between items-center border-t border-dashed border-gray-300 pt-4">
+                              <span className="font-mono text-xs uppercase text-gray-400">{card.source || "Source"}</span>
+                              <a href={card.url} target="_blank" rel="noopener noreferrer" className="font-bold text-sm flex items-center gap-2 hover:underline decoration-2 underline-offset-4 decoration-[#FF4D00]">
+                                READ FULL STORY <span className="text-lg">→</span>
+                              </a>
+                            </div>
+                          )}
+                        </article>
+                      ))}
+                      {!data?.cards && (
+                        <div className="text-center py-20 font-mono text-gray-400">NO DATA AVAILABLE.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
             )}
           </div>
-        </header>
-
-        {/* === 分割线 === */}
-        <div className="px-6 flex items-center gap-4 opacity-50">
-          <div className="h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent flex-1"></div>
-          <div className="text-[10px] text-slate-400 tracking-[0.2em] uppercase">Daily Brief</div>
-          <div className="h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent flex-1"></div>
-        </div>
-
-        {/* === 菜单栏 (Sticky吸顶) === */}
-        <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-white/20 px-2 py-3 mt-4">
-          <div className="flex justify-between items-center px-2 overflow-x-auto no-scrollbar gap-2">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveTab(cat)}
-                className={`flex-1 min-w-[60px] py-2 rounded-lg text-sm font-bold transition-all duration-300 relative overflow-hidden group
-                  ${activeTab === cat 
-                    ? 'text-white shadow-lg shadow-blue-500/30 scale-105' 
-                    : 'text-slate-500 hover:bg-white/50 hover:text-slate-700'
-                  }`}
-              >
-                {/* 选中态的背景渐变 */}
-                {activeTab === cat && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 -z-10"></div>
-                )}
-                {cat}
-              </button>
-            ))}
-          </div>
-        </nav>
-
-        {/* === Part 2: 下部 AI 总结区 === */}
-        <main className="flex-1 p-6 relative">
-          {loading ? (
-            <div className="space-y-4 animate-pulse pt-4">
-              <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-              <div className="h-4 bg-slate-200 rounded w-full"></div>
-              <div className="h-4 bg-slate-200 rounded w-5/6"></div>
-            </div>
-          ) : news ? (
-            <div className="animate-fade-in-up">
-              {/* 内容卡片 */}
-              <div className="prose prose-slate prose-sm max-w-none text-slate-600 leading-7 font-light text-justify">
-                {/* 简单的 Markdown 渲染替代方案：直接显示文本，保留换行 */}
-                <div className="whitespace-pre-wrap">{news.content}</div>
-              </div>
-
-              {/* 底部链接卡片 */}
-              {activeTab !== "段子" && (
-                <div className="mt-8 pt-6 border-t border-slate-200/60">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Original Sources</span>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    {news.links?.map((link: any, idx: number) => (
-                      <a 
-                        key={idx}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer"
-                      >
-                        <span className="text-xs font-medium text-slate-700 truncate max-w-[240px] group-hover:text-blue-700 transition-colors">
-                          {link.title || "点击查看相关报道源文"}
-                        </span>
-                        <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                           <svg className="w-3 h-3 text-blue-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                           </svg>
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
-              <span className="text-4xl mb-2">🍃</span>
-              <span className="text-xs tracking-widest">今日暂无内容</span>
-            </div>
-          )}
         </main>
-
-        {/* 底部装饰 */}
-        <footer className="py-6 text-center">
-           <div className="text-[10px] text-slate-300 font-mono">
-             DESIGNED BY AI & HUMAN
-           </div>
-        </footer>
-
       </div>
     </div>
   );
