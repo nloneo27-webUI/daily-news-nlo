@@ -11,7 +11,7 @@ const supabase = createClient(
 
 const MENU_ITEMS = ["首页", "政治", "经济", "科技", "AI", "段子"];
 
-// 前端备用图库 (双重保险：万一后端图挂了，前端立刻补位)
+// 前端备用图库 (保持不变，用于兜底)
 const FALLBACK_IMGS: Record<string, string> = {
   "政治": "https://images.unsplash.com/photo-1529101091760-6149d4c46b29?w=1200&q=80",
   "经济": "https://images.unsplash.com/photo-1611974765270-ca1258634369?w=1200&q=80",
@@ -61,7 +61,7 @@ export default function Home() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
-    utterance.rate = 1.1;
+    utterance.rate = 1.1; // 语速稍快更自然
     utterance.onend = () => setSpeakingIndex(null);
     window.speechSynthesis.speak(utterance);
     setSpeakingIndex(index);
@@ -133,13 +133,20 @@ export default function Home() {
                             <span className="w-2 h-2 bg-[#FF4D00] rounded-full animate-pulse"></span>2025 年度观察
                           </h3>
                           <div className="text-lg md:text-xl font-sans leading-relaxed text-justify opacity-90">{data.summary}</div>
+                          {/* 首页总结播放按钮 */}
+                          <button 
+                            onClick={() => handleSpeak(data.summary, 999)}
+                            className="mt-6 flex items-center gap-2 text-xs font-bold border border-[#F2F0E9]/30 px-3 py-1.5 rounded-full hover:bg-[#F2F0E9] hover:text-[#1A1A1A] transition-all"
+                          >
+                            {speakingIndex === 999 ? "STOP AUDIO" : "LISTEN SUMMARY"}
+                          </button>
                         </div>
                       </section>
                     )}
                   </>
                 )}
 
-                {/* 分类页 - 垂直图文布局 */}
+                {/* 分类页 */}
                 {activeTab !== "首页" && (
                   <div>
                     <header className="mb-12 flex items-end gap-4 border-b-4 border-black pb-4">
@@ -159,7 +166,7 @@ export default function Home() {
                             <span className="font-mono text-xl font-bold text-[#1A1A1A]/20">0{idx + 1}</span>
                           </div>
 
-                          {/* 🖼️ 图片 (带防崩坏机制) */}
+                          {/* 图片 (带防崩坏) */}
                           {card.image && (
                             <div className="w-full h-64 md:h-80 mb-8 overflow-hidden rounded-lg bg-gray-200 border-2 border-[#1A1A1A] shadow-[6px_6px_0px_0px_#1A1A1A] group-hover:translate-x-1 group-hover:-translate-y-1 transition-all">
                               <img 
@@ -167,7 +174,7 @@ export default function Home() {
                                 alt={card.title} 
                                 className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
                                 onError={(e) => {
-                                  // 核心修复：加载失败时，自动换成前端预设的图
+                                  // 图片加载失败自动替换
                                   e.currentTarget.src = FALLBACK_IMGS[activeTab] || FALLBACK_IMGS['default'];
                                 }}
                               />
@@ -181,15 +188,26 @@ export default function Home() {
 
                           {/* 底部功能区 */}
                           <div className="flex items-center justify-between">
-                            {activeTab === "段子" && (
-                              <button 
-                                onClick={() => handleSpeak(card.content, idx)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 transition-all font-bold text-sm
-                                  ${speakingIndex === idx ? 'border-[#FF4D00] text-[#FF4D00] bg-[#FF4D00]/10' : 'border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white'}`}
-                              >
-                                {speakingIndex === idx ? "STOP" : "LISTEN"}
-                              </button>
-                            )}
+                            {/* 🔊 关键修改：取消了仅限段子板块的限制，所有板块都显示播放按钮 */}
+                            <button 
+                              onClick={() => handleSpeak(card.content, idx)}
+                              className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 transition-all font-bold text-sm
+                                ${speakingIndex === idx 
+                                  ? 'border-[#FF4D00] text-[#FF4D00] bg-[#FF4D00]/10' 
+                                  : 'border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white'}`}
+                            >
+                              {speakingIndex === idx ? (
+                                <>
+                                  <span className="w-2 h-2 bg-[#FF4D00] rounded-full animate-pulse"></span>
+                                  STOP
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-4 0-.29.27-7 7H1v6h1.71l7 7 .29.27V3.23zm-3 4.41L4.41 10H3v4h1.41l2.59 2.36V7.64z"/></svg>
+                                  LISTEN
+                                </>
+                              )}
+                            </button>
 
                             {card.url && (
                               <a href={card.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-base font-bold text-blue-800 hover:text-[#FF4D00] transition-colors border-b-2 border-transparent hover:border-[#FF4D00]">

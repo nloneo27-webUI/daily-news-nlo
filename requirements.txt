@@ -1,0 +1,7 @@
+feedparser
+google-generativeai
+supabase
+python-dotenv
+requests
+dashscope
+openai

@@ -12,13 +12,13 @@ import dashscope
 from http import HTTPStatus
 from openai import OpenAI
 import re
+import urllib.parse
 
 # ================= 1. 配置区 =================
 load_dotenv()
 
 supabase = create_client(os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_KEY"))
 
-# 初始化 AI
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 gemini_model = genai.GenerativeModel('gemini-flash-latest')
 
@@ -29,58 +29,42 @@ deepseek_client = OpenAI(
 
 dashscope.api_key = os.environ.get("DASHSCOPE_API_KEY")
 
+# 本地运行时使用代理，GitHub Actions 上运行时不需要
+# 我们通过检查是否有 'GITHUB_ACTIONS' 环境变量来判断
+IS_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 PROXY_PORT = "7897"
 
-# ================= 2. 稳定的 RSS 源 =================
+# ================= 2. 优化后的 RSS 源 =================
 RSS_SOURCES = {
     "政治": [
-        "http://rss.sina.com.cn/news/china/focus15.xml",
-        "https://www.zaobao.com.sg/rss/news/china",
-        "http://feeds.bbci.co.uk/news/world/rss.xml"
+        "https://www.chinanews.com.cn/rss/scroll-news.xml", # 中新网 (稳)
+        "http://feeds.bbci.co.uk/news/world/rss.xml",       # BBC (GitHub Actions上能抓)
+        "https://rsshub.app/zaobao/realtime/china"          # 联合早报 (RSSHub版，更易抓)
     ],
     "经济": [
-        "http://rss.sina.com.cn/news/finance/chinalist.xml",
-        "https://feed.36kr.com/tags/finance",
-        "https://www.ftchinese.com/rss/news"
+        "http://www.ftchinese.com/rss/news",                # FT
+        "https://rsshub.app/wallstreetcn/news/global",      # 华尔街见闻
+        "http://rss.sina.com.cn/news/finance/chinalist.xml" # 新浪
     ],
     "科技": [
         "https://www.36kr.com/feed",
         "https://sspai.com/feed",
-        "https://www.huxiu.com/rss/0.xml"
+        "https://rsshub.app/36kr/newsflashes"               # 36Kr 快讯
     ],
     "AI": [
         "https://www.jiqizhixin.com/rss",
-        "https://www.qbitai.com/feed",
-        "https://rsshub.app/36kr/search/article/AI"
+        "https://rsshub.app/36kr/search/article/AI",
+        "https://www.qbitai.com/feed"
     ]
 }
 
-# ================= 3. 修复后的图片库 (真实链接，不会404) =================
-FIXED_IMAGES = {
-    "政治": [
-        "https://images.unsplash.com/photo-1529101091760-6149d4c46b29?w=800&q=80",
-        "https://images.unsplash.com/photo-1575517111839-3a3843ee7f5d?w=800&q=80"
-    ],
-    "经济": [
-        "https://images.unsplash.com/photo-1611974765270-ca1258634369?w=800&q=80",
-        "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&q=80"
-    ],
-    "科技": [
-        "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80",
-        "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80"
-    ],
-    "AI": [
-        "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80",
-        "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&q=80"
-    ],
-    "段子": [
-        "https://images.unsplash.com/photo-1505664194779-8beaceb93744?w=800&q=80"
-    ]
-}
-
-# ================= 4. 工具函数 =================
+# ================= 3. 工具函数 =================
 
 def set_proxy(enable=True):
+    """GitHub Actions 上禁用代理，本地根据需要开启"""
+    if IS_GITHUB_ACTIONS:
+        return # 云端环境自带梯子，不需要设代理
+
     proxy_url = f"http://127.0.0.1:{PROXY_PORT}"
     if enable:
         os.environ["HTTP_PROXY"] = proxy_url
@@ -92,17 +76,20 @@ def set_proxy(enable=True):
 def fetch_rss_with_headers(url):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     try:
-        set_proxy(True)
-        resp = requests.get(url, headers=headers, timeout=10)
+        # 策略：GitHub Actions 直接抓；本地先代理后直连
+        if not IS_GITHUB_ACTIONS: set_proxy(True)
+        resp = requests.get(url, headers=headers, timeout=15)
         resp.encoding = 'utf-8'
         return feedparser.parse(resp.content)
     except:
         try:
-            set_proxy(False)
-            resp = requests.get(url, headers=headers, timeout=10)
+            if not IS_GITHUB_ACTIONS: set_proxy(False)
+            resp = requests.get(url, headers=headers, timeout=15)
             resp.encoding = 'utf-8'
             return feedparser.parse(resp.content)
-        except: return None
+        except Exception as e:
+            print(f"    ❌ 读取失败: {url}")
+            return None
 
 def clean_text(text):
     from bs4 import BeautifulSoup
@@ -110,51 +97,45 @@ def clean_text(text):
     except: return text[:300]
 
 def extract_image_from_entry(entry):
-    if 'media_content' in entry and len(entry.media_content) > 0: return entry.media_content[0]['url']
-    if 'links' in entry:
-        for link in entry.links:
-            if 'image' in link.get('type', ''): return link.href
-    content = entry.get('summary', '') + entry.get('content', [{'value': ''}])[0].get('value', '')
-    match = re.search(r'<img[^>]+src=["\'](http[^"\']+)["\']', content)
-    if match: return match.group(1)
+    """尝试提取原图"""
+    try:
+        if 'media_content' in entry and entry.media_content: return entry.media_content[0]['url']
+        content = entry.get('summary', '') + str(entry.get('content', ''))
+        match = re.search(r'<img[^>]+src=["\'](http[^"\']+)["\']', content)
+        if match: return match.group(1)
+    except: pass
     return None
 
-def get_fallback_image(category):
-    # 【修复点】不再请求 source.unsplash.com，而是从本地列表随机取
-    images = FIXED_IMAGES.get(category, FIXED_IMAGES["科技"])
-    return random.choice(images)
+def generate_ai_image_url(prompt_text):
+    """
+    使用 Pollinations.ai 生成图片
+    无需 Key，免费，根据 prompt 生成
+    """
+    safe_prompt = urllib.parse.quote(prompt_text)
+    # 样式：realistic (写实), width: 800, height: 600
+    return f"https://image.pollinations.ai/prompt/{safe_prompt}?width=800&height=600&model=flux&seed={random.randint(1,1000)}"
 
-def is_url_seen(url):
-    try:
-        res = supabase.table("news_history").select("id").eq("url", url).execute()
-        return len(res.data) > 0
-    except: return False
-
-def mark_url_seen(url, title):
-    try: supabase.table("news_history").insert({"url": url, "title": title}).execute()
-    except: pass
-
+# --- 智能 AI 调用 ---
 def call_ai_smart(prompt, return_json=False):
     # Gemini
     try:
-        set_proxy(True)
-        response = gemini_model.generate_content(prompt, request_options={'timeout': 20})
+        if not IS_GITHUB_ACTIONS: set_proxy(True)
+        response = gemini_model.generate_content(prompt, request_options={'timeout': 30})
         text = response.text.strip()
         if return_json: return json.loads(text.replace("```json", "").replace("```", "").strip())
         return text
     except:
         # DeepSeek
         try:
-            set_proxy(False)
-            client = deepseek_client
-            resp = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": prompt}], stream=False)
+            if not IS_GITHUB_ACTIONS: set_proxy(False)
+            resp = deepseek_client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": prompt}], stream=False)
             text = resp.choices[0].message.content.strip()
             if return_json: return json.loads(text.replace("```json", "").replace("```", "").strip())
             return text
         except:
             # Qwen
             try:
-                set_proxy(False)
+                if not IS_GITHUB_ACTIONS: set_proxy(False)
                 resp = dashscope.Generation.call(model=dashscope.Generation.Models.qwen_turbo, prompt=prompt)
                 if resp.status_code == HTTPStatus.OK:
                     text = resp.output.text.strip()
@@ -167,6 +148,7 @@ def call_ai_smart(prompt, return_json=False):
 def generate_category_cards(category):
     today_str = datetime.datetime.now().strftime('%Y-%m-%d')
     print(f"\n📂 处理分类: {category} ...")
+
     materials = []
     image_pool = {}
 
@@ -177,69 +159,98 @@ def generate_category_cards(category):
         for url in feeds:
             feed = fetch_rss_with_headers(url)
             if not feed or not feed.entries: continue
-            print(f"    ✅ 抓取: {url}")
-            for entry in feed.entries:
-                link = entry.link
-                if is_url_seen(link): continue
+            print(f"    ✅ 抓取: {url} - {len(feed.entries)}条")
+            for entry in feed.entries[:5]: # 多抓点
                 title = entry.title
                 img = extract_image_from_entry(entry)
                 if img: image_pool[title] = img
-                materials.append(f"标题：{title}\n链接：{link}\n摘要：{clean_text(entry.get('summary',''))}")
-                if len(materials) >= 15: break
-            if len(materials) >= 15: break
+                materials.append(f"标题：{title}\n链接：{entry.link}\n摘要：{clean_text(entry.get('summary',''))}")
 
-        if not materials:
-            print("    ❌ 无素材")
-            return
+    # 如果实在没素材，如果是段子就硬写，如果是新闻就跳过
+    if not materials and category != "段子":
+        print("    ❌ 无素材")
+        return
         
-        random.shuffle(materials)
-        materials = materials[:12]
-        prompt_sys = f"你是一个新闻编辑。挑选5条最有价值的【{category}】新闻。每条200字，简明扼要。"
+    random.shuffle(materials)
+    materials = materials[:15]
+    
+    prompt_sys = f"你是一个资深新闻主编。挑选5条最有价值的【{category}】新闻。"
 
-    prompt = f"""{prompt_sys}
-    请严格返回 JSON 数组格式：
-    [ {{"title": "原标题", "content": "内容...", "url": "链接", "source": "来源媒体"}} ]
-    素材：{chr(10).join(materials)}"""
+    # 【关键升级】要求 AI 返回 image_prompt (英文绘图提示词)
+    prompt = f"""
+    {prompt_sys}
+    
+    【重要】请严格返回 JSON 数组格式。
+    对于每条新闻，请生成一个 `image_prompt` (英文)，描述新闻画面，用于AI绘图。
+    例如： "A futuristic robot shaking hands with a human, realistic style, 8k"
+    
+    格式：
+    [
+        {{
+            "title": "中文标题",
+            "content": "300字中文摘要...",
+            "url": "原始链接",
+            "source": "来源媒体",
+            "image_prompt": "An abstract 3d render of artificial intelligence neural network, blue and orange lighting"
+        }}
+    ]
+    
+    素材如下：
+    {chr(10).join(materials)}
+    """
 
     cards_json = call_ai_smart(prompt, return_json=True)
+    
     if cards_json:
         final_cards = []
         for card in cards_json:
-            # 1. 先给默认图 (这是关键！确保每条都有图)
-            card['image'] = get_fallback_image(category)
-            
-            # 2. 如果之前抓到了原图，尝试替换
+            # 1. 优先用原图 (如果能匹配到)
+            has_original_image = False
             if category != "段子":
-                if card.get('url'): mark_url_seen(card['url'], card['title'])
                 for raw_title, raw_img in image_pool.items():
                     if card['title'][:5] in raw_title or raw_title[:5] in card['title']:
                         card['image'] = raw_img
+                        has_original_image = True
                         break
+            
+            # 2. 如果没有原图，或者板块是段子，使用 AI 生成图
+            if not has_original_image:
+                img_prompt = card.get('image_prompt', f"{category} news abstract concept art")
+                # 拼接 Pollinations URL
+                card['image'] = generate_ai_image_url(img_prompt)
+            
             final_cards.append(card)
 
-        supabase.table("daily_briefs").insert({"date": today_str, "category": category, "cards": final_cards}).execute()
-        print(f"   🎉 [{category}] 入库成功")
+        # 删掉今天的旧数据，防止重复
+        supabase.table("daily_briefs").delete().eq("date", today_str).eq("category", category).execute()
+        
+        supabase.table("daily_briefs").insert({
+            "date": today_str, "category": category, "cards": final_cards
+        }).execute()
+        print(f"   🎉 [{category}] 入库成功 (AI配图已生成)")
         time.sleep(3)
 
 def generate_daily_quote():
     today_str = datetime.datetime.now().strftime('%Y-%m-%d')
     print("✨ 生成哲理...")
-    if supabase.table("daily_quotes").select("id").eq("date", today_str).execute().data: return
+    # 允许每天更新覆盖
+    supabase.table("daily_quotes").delete().eq("date", today_str).execute()
+    
     prompt = "随机生成一句富有哲理的名人名言或历史上的今天。返回JSON: {\"content\":..., \"author\":...}"
     data = call_ai_smart(prompt, return_json=True)
     if data: supabase.table("daily_quotes").insert({"date": today_str, "content": data.get("content"), "author": data.get("author")}).execute()
 
 def generate_home_summary():
-    today = datetime.datetime.now()
-    today_str = today.strftime('%Y-%m-%d')
+    today_str = datetime.datetime.now().strftime('%Y-%m-%d')
     print("\n🏠 生成首页总结...")
-    # 年末逻辑
+    supabase.table("daily_briefs").delete().eq("date", today_str).eq("category", "首页").execute()
+    
+    today = datetime.datetime.now()
     if today.month == 12 and today.day >= 24:
-        topics = ["AI重塑世界", "全球经济震荡", "太空探索", "科技伦理"]
-        topic = random.choice(topics)
-        prompt = f"今天是2025年12月{today.day}日。请以【2025年终评述：{topic}】为题，写一篇250字的深度短评。只返回纯文本。"
+        prompt = f"今天是2025年12月{today.day}日。写一篇250字的【2025年终科技与世界局势评述】。只返回纯文本。"
     else:
         prompt = "写一段200字的今日全球新闻综述。"
+    
     summary = call_ai_smart(prompt)
     if summary:
         supabase.table("daily_briefs").insert({"date": today_str, "category": "首页", "summary": summary}).execute()
