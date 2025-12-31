@@ -11,6 +11,16 @@ const supabase = createClient(
 
 const MENU_ITEMS = ["首页", "政治", "经济", "科技", "AI", "段子"];
 
+// 前端备用图库 (双重保险：万一后端图挂了，前端立刻补位)
+const FALLBACK_IMGS: Record<string, string> = {
+  "政治": "https://images.unsplash.com/photo-1529101091760-6149d4c46b29?w=1200&q=80",
+  "经济": "https://images.unsplash.com/photo-1611974765270-ca1258634369?w=1200&q=80",
+  "科技": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=80",
+  "AI":   "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&q=80",
+  "段子": "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?w=1200&q=80",
+  "default": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=80"
+};
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState("首页");
   const [quote, setQuote] = useState<any>(null);
@@ -116,10 +126,12 @@ export default function Home() {
                       </section>
                     )}
                     {data?.summary && (
-                      <section className="bg-[#1A1A1A] text-[#F2F0E9] p-8 md:p-10 relative overflow-hidden group">
+                      <section className="bg-[#1A1A1A] text-[#F2F0E9] p-8 md:p-10 relative overflow-hidden group rounded-xl">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF4D00] blur-[80px] opacity-20"></div>
                         <div className="relative z-10">
-                          <h3 className="font-mono text-xs font-bold uppercase text-[#FF4D00] mb-4 flex items-center gap-2"><span className="w-2 h-2 bg-[#FF4D00] rounded-full animate-pulse"></span>AI SUMMARY</h3>
+                          <h3 className="font-mono text-sm font-bold uppercase text-[#FF4D00] mb-4 flex items-center gap-2">
+                            <span className="w-2 h-2 bg-[#FF4D00] rounded-full animate-pulse"></span>2025 年度观察
+                          </h3>
                           <div className="text-lg md:text-xl font-sans leading-relaxed text-justify opacity-90">{data.summary}</div>
                         </div>
                       </section>
@@ -127,72 +139,67 @@ export default function Home() {
                   </>
                 )}
 
-                {/* 分类页 */}
+                {/* 分类页 - 垂直图文布局 */}
                 {activeTab !== "首页" && (
                   <div>
                     <header className="mb-12 flex items-end gap-4 border-b-4 border-black pb-4">
                       <h1 className="text-6xl md:text-8xl font-serif font-black text-[#1A1A1A]">{activeTab}</h1>
-                      <span className="font-mono text-sm mb-2 opacity-60">/ NEWS FEED</span>
+                      <span className="font-mono text-sm mb-3 text-[#FF4D00] font-bold">/ NEWS FEED</span>
                     </header>
 
-                    <div className="flex flex-col gap-12">
+                    <div className="flex flex-col gap-16">
                       {data?.cards?.map((card: any, idx: number) => (
-                        // 这里是卡片部分，我加上了图片显示逻辑
-                        <article key={idx} className="group flex flex-col md:flex-row gap-6 md:gap-10 border-b border-black/10 pb-12 last:border-0 relative">
+                        <article key={idx} className="group relative border-b border-black/10 pb-16 last:border-0">
                           
-                          {/* 🖼️ 图片区域 (这里是你之前缺失的！) */}
+                          {/* 标题 */}
+                          <div className="flex justify-between items-start mb-6">
+                            <h3 className="text-2xl md:text-4xl font-black leading-tight group-hover:text-[#FF4D00] transition-colors w-11/12">
+                              {card.title}
+                            </h3>
+                            <span className="font-mono text-xl font-bold text-[#1A1A1A]/20">0{idx + 1}</span>
+                          </div>
+
+                          {/* 🖼️ 图片 (带防崩坏机制) */}
                           {card.image && (
-                            <div className="w-full md:w-1/3 aspect-[4/3] md:aspect-auto overflow-hidden rounded-lg border-2 border-[#1A1A1A] shadow-[4px_4px_0px_0px_#1A1A1A]">
+                            <div className="w-full h-64 md:h-80 mb-8 overflow-hidden rounded-lg bg-gray-200 border-2 border-[#1A1A1A] shadow-[6px_6px_0px_0px_#1A1A1A] group-hover:translate-x-1 group-hover:-translate-y-1 transition-all">
                               <img 
                                 src={card.image} 
                                 alt={card.title} 
-                                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500 transform group-hover:scale-105"
+                                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
+                                onError={(e) => {
+                                  // 核心修复：加载失败时，自动换成前端预设的图
+                                  e.currentTarget.src = FALLBACK_IMGS[activeTab] || FALLBACK_IMGS['default'];
+                                }}
                               />
                             </div>
                           )}
 
-                          {/* 内容区域 */}
-                          <div className="flex-1 flex flex-col">
-                            <div className="flex justify-between items-start mb-3">
-                              <span className="font-mono text-xs font-bold text-[#FF4D00]">0{idx + 1}</span>
-                              {card.source && <span className="font-mono text-xs uppercase text-gray-400">{card.source}</span>}
-                            </div>
-                            
-                            <h3 className="text-2xl md:text-3xl font-bold mb-4 leading-tight group-hover:text-[#FF4D00] transition-colors">{card.title}</h3>
-                            <p className="text-base text-gray-600 leading-relaxed font-light mb-6 text-justify flex-1">{card.content}</p>
-                            
-                            <div className="flex items-center justify-between">
-                              {/* 听段子按钮 */}
-                              {activeTab === "段子" && (
-                                <button 
-                                  onClick={() => handleSpeak(card.content, idx)}
-                                  className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 transition-all font-bold text-sm
-                                    ${speakingIndex === idx 
-                                      ? 'border-[#FF4D00] text-[#FF4D00] bg-[#FF4D00]/10' 
-                                      : 'border-gray-200 text-gray-400 hover:border-[#1A1A1A] hover:text-[#1A1A1A]'
-                                    }`}
-                                >
-                                  {speakingIndex === idx ? (
-                                    <>STOP</>
-                                  ) : (
-                                    <>
-                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-4 0-.29.27-7 7H1v6h1.71l7 7 .29.27V3.23zm-3 4.41L4.41 10H3v4h1.41l2.59 2.36V7.64z"/></svg>
-                                      LISTEN
-                                    </>
-                                  )}
-                                </button>
-                              )}
+                          {/* 摘要 */}
+                          <p className="text-lg text-gray-700 leading-relaxed font-light mb-6 text-justify">
+                            {card.content}
+                          </p>
 
-                              {card.url && (
-                                <a href={card.url} target="_blank" rel="noopener noreferrer" className="self-start inline-flex items-center gap-2 text-sm font-bold border-b-2 border-[#1A1A1A] pb-1 hover:border-[#FF4D00] hover:text-[#FF4D00] transition-colors">
-                                  READ STORY <span className="text-lg">→</span>
-                                </a>
-                              )}
-                            </div>
+                          {/* 底部功能区 */}
+                          <div className="flex items-center justify-between">
+                            {activeTab === "段子" && (
+                              <button 
+                                onClick={() => handleSpeak(card.content, idx)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 transition-all font-bold text-sm
+                                  ${speakingIndex === idx ? 'border-[#FF4D00] text-[#FF4D00] bg-[#FF4D00]/10' : 'border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white'}`}
+                              >
+                                {speakingIndex === idx ? "STOP" : "LISTEN"}
+                              </button>
+                            )}
+
+                            {card.url && (
+                              <a href={card.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-base font-bold text-blue-800 hover:text-[#FF4D00] transition-colors border-b-2 border-transparent hover:border-[#FF4D00]">
+                                READ ORIGINAL STORY <span className="text-xl">→</span>
+                              </a>
+                            )}
                           </div>
                         </article>
                       ))}
-                      {!data?.cards && <div className="text-center py-20 font-mono text-gray-400">NO DATA.</div>}
+                      {!data?.cards && <div className="text-center py-20 font-mono text-gray-400">NO DATA AVAILABLE.</div>}
                     </div>
                   </div>
                 )}
